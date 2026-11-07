@@ -1,0 +1,53 @@
+
+# Visual Studio: пользовательские настройки и кэш IDE
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Результаты сборки
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+[Aa]RM/
+[Aa]RM64/
+
+# Промежуточные файлы компиляции и линковки
+*.obj
+*.o
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.out
+*.app
+
+# Файлы отладки и профилирования
+*.ipch
+*.pgc
+*.pgd
+*.prof
+*.profdata
+*.coverage
+*.coveragexml
+
+# Временные файлы
+*.tmp
+*.temp
+*.log
+*.cache
+*.bak
+*.old
+
+# Файлы операционной системы
+Thumbs.db
+.DS_Store
