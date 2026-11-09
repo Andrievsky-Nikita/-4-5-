@@ -42,8 +42,18 @@ Alphabet FiniteAutomaton::readAlhabet()
 
 FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& input, const size_t len)
 {
-	std::vector<size_t> numbers;
+	StateSet numbers;
 	size_t pos = 0;
+
+	const auto sort = [](StateSet& numbers)
+		{
+			std::sort(numbers.begin(), numbers.end());
+
+			numbers.erase(
+				std::unique(numbers.begin(), numbers.end()),
+				numbers.end()
+			);
+		};
 
 	while (pos < input.size())
 	{
@@ -54,6 +64,8 @@ FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& inp
 
 		if (pos == input.size())
 		{
+			sort(numbers);
+
 			return numbers;
 		}
 
@@ -89,12 +101,7 @@ FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& inp
 		numbers.push_back(value - 1);
 	}
 	
-	std::sort(numbers.begin(), numbers.end());
-
-	numbers.erase(
-		std::unique(numbers.begin(), numbers.end()),
-		numbers.end()
-	);
+	sort(numbers);
 
 	return numbers;
 }
@@ -294,7 +301,6 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 			const auto endIt = transitionFunc.end();
 
 			if (transitionFunc.find({ stateId, symbolId } ) != endIt)
-			{	
 				for (size_t i : transitionFunc.find({ stateId, symbolId })->second)
 				{
 					arrayStates.emplace(i);
@@ -303,8 +309,6 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 						for (size_t ind : transitionFunc.find({ i, alphabet.getAlphabet().size() })->second)
 						arrayStates.emplace(ind);
 				}
-
-			}
 
 			if (transitionFunc.find({ stateId, alphabet.getAlphabet().size() }) != endIt)
 				for (size_t indStateEpsilon : transitionFunc.find({ stateId, alphabet.getAlphabet().size() })->second)
@@ -380,7 +384,7 @@ void FiniteAutomaton::printTransitionFunc() const
 			{
 				for (size_t ind : transitionFunc.find(key)->second)
 				{
-					std::cout << ind << ' ';
+					std::cout << ind + 1 << ' ';
 				}
 				std::cout << '\n';
 			}
@@ -394,33 +398,106 @@ void FiniteAutomaton::printTransitionFunc() const
 
 FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
 {
-	FiniteAutomaton automatonWoutEpsilon(*this);
+	if (checkETransition())
+	{
+		throw std::logic_error("Объект не подлежит детерминированию. Содержит е-переходы");
+	}
 
-	automatonWoutEpsilon.states.clear();
-	automatonWoutEpsilon.transitionFunc.clear();
+	FiniteAutomaton deterministicAutomaton(*this);
+
+	deterministicAutomaton.states.clear();
+	deterministicAutomaton.transitionFunc.clear();
 
 	std::vector<StateSet> statesDeterminateAutomaton;
 	statesDeterminateAutomaton.reserve(states.size());
+	statesDeterminateAutomaton.emplace_back();
 
-	automatonWoutEpsilon.states.push_back({ true, false });
+	deterministicAutomaton.states.push_back({ true, false });
 	
-	std::copy_if(
-		states.begin(), states.end(),
-		std::back_inserter(statesDeterminateAutomaton[0]),
-		[](StateInfo state)
+	for (StateId i = 0; i < states.size(); i++)
+	{
+		if (states[i].isStart)
 		{
-			return state.isStart;
-		}));
+			statesDeterminateAutomaton[0].push_back(i);
+		}
+	}
 
-	const auto getTransition = [this](StateId stateId, SymbolId symbolId)
+	const auto getTransition = [this](StateId stateId, SymbolId symbolId, std::vector<StateSet>& statesDeterminateAutomaton, FiniteAutomaton& deterministicAutomaton)
 		{
-			
+			std::set<StateId> statesTransition;
+
+			for (StateId i = 0; i < statesDeterminateAutomaton[stateId].size(); i++)
+			{
+				auto it = transitionFunc.find({ statesDeterminateAutomaton[stateId][i], symbolId });
+
+				if (it != transitionFunc.end())
+				{
+					statesTransition.insert(it->second.begin(), it->second.end());
+				}
+			}
+
+			if (statesTransition.size() == 0)
+			{
+				return;
+			}
+
+			StateId indTransition = statesDeterminateAutomaton.size();
+
+			for (StateId i = 0; i < statesDeterminateAutomaton.size(); i++)
+			{
+				if (std::set(
+					statesDeterminateAutomaton[i].begin(),
+					statesDeterminateAutomaton[i].end()
+					) == statesTransition)
+				{
+					indTransition = i;
+					break;
+				}
+			}
+
+			StateId newStateId = statesDeterminateAutomaton.size();
+
+			if (indTransition == statesDeterminateAutomaton.size())
+			{
+				statesDeterminateAutomaton.push_back(StateSet(statesTransition.begin(), statesTransition.end()));
+				deterministicAutomaton.states.push_back(StateInfo());
+				deterministicAutomaton.transitionFunc.insert({ { stateId, symbolId }, StateSet{newStateId} });
+			}
+			else 
+			{
+				deterministicAutomaton.transitionFunc.insert({ { stateId, symbolId }, StateSet{indTransition} });
+			}
 		};
 
 	size_t ind = 0;
 
-	while (ind != states.size())
+	while (ind != statesDeterminateAutomaton.size())
 	{
+		for (SymbolId i = 0; i < alphabet.getAlphabet().size(); i++)
+		{
+			getTransition(ind, i, statesDeterminateAutomaton, deterministicAutomaton);
+		}
 
+		ind++;
 	}
+
+	for (StateId i = 0; i < statesDeterminateAutomaton.size(); i++)
+	{
+		if (std::any_of(
+			statesDeterminateAutomaton[i].begin(),
+			statesDeterminateAutomaton[i].end(),
+			[this](const StateId& stateId)
+			{
+				return states[stateId].isFinal;
+			}))
+		{
+			deterministicAutomaton.states[i].isFinal = true;
+		}
+		else
+		{
+			deterministicAutomaton.states[i].isFinal = false;
+		}
+	}
+
+	return deterministicAutomaton;
 }

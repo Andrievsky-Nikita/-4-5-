@@ -15,6 +15,7 @@
 #include <limits>
 #include <algorithm>
 #include <windows.h>
+#include <iterator>
 
 struct Alphabet
 {
@@ -79,15 +80,15 @@ private:
 public: 
 	static FiniteAutomaton readFiniteAutomaton();
 	void printTransitionFunc() const;
-	FiniteAutomaton eliminateEpsilonTransitions() const;
-	bool checkAbsenceETransition() const {
+	bool checkETransition() const {
 		return std::any_of(
 			transitionFunc.begin(),
 			transitionFunc.end(),
 			[this](std::pair<TransitionKey, StateSet> elem)
 			{
-				return transitionFunc.contains(elem.first);
+				return elem.first.second == alphabet.getAlphabet().size();
 			});
 	};
+	FiniteAutomaton eliminateEpsilonTransitions() const;
 	FiniteAutomaton determinateAutomaton() const;
 };

@@ -6,7 +6,8 @@ int main()
     SetConsoleOutputCP(CP_UTF8);
 
     FiniteAutomaton automaton = FiniteAutomaton::readFiniteAutomaton();
-    automaton.printTransitionFunc();
-    //FiniteAutomaton automatonWoutEpsilon = automaton.eliminateEpsilonTransitions();
-
+    FiniteAutomaton automatonWoutEpsilon = automaton.eliminateEpsilonTransitions();
+    automatonWoutEpsilon.printTransitionFunc();
+    FiniteAutomaton determinateAutomaton = automatonWoutEpsilon.determinateAutomaton();
+    determinateAutomaton.printTransitionFunc();
 }
