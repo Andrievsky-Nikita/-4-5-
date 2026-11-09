@@ -78,6 +78,16 @@ private:
 
 public: 
 	static FiniteAutomaton readFiniteAutomaton();
+	void printTransitionFunc() const;
 	FiniteAutomaton eliminateEpsilonTransitions() const;
-
+	bool checkAbsenceETransition() const {
+		return std::any_of(
+			transitionFunc.begin(),
+			transitionFunc.end(),
+			[this](std::pair<TransitionKey, StateSet> elem)
+			{
+				return transitionFunc.contains(elem.first);
+			});
+	};
+	FiniteAutomaton determinateAutomaton() const;
 };

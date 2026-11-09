@@ -243,6 +243,7 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 	FiniteAutomaton automatonWoutEpsilon(*this);
 
 	std::vector<StateSet> EClosureStates;
+	EClosureStates.reserve(states.size());
 
 	const auto getEClosureState = [this](auto&& self, StateId i, StateSet& EClosure)
 		{
@@ -275,93 +276,151 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 		EClosureStates.push_back(EClosure);
 	}
 		
-	for (size_t i = 0; i < states.size(); i++)
+	for (size_t i = 0; i < EClosureStates.size(); i++)
 	{
-		for (size_t j = 0; j < EClosureStates[i].size(); j++)
-		{
-			if (states[j].isFinal)
-			{
-				automatonWoutEpsilon.states[i].isFinal = true;
-				continue;
-			}
-
-		}
-		automatonWoutEpsilon.states[i].isFinal = false;
+		automatonWoutEpsilon.states[i].isFinal =
+			std::any_of(
+				EClosureStates[i].begin(),
+				EClosureStates[i].end(),
+				[this](StateId id)
+				{
+					return states[id].isFinal;
+				}
+			);
 	}
 
-	const auto getTransitionEClosureBySymbol = [this](StateId stateId, SymbolId symbolId, std::set<SymbolId>& arrayStates)
+	const auto getTransitionEClosureBySymbol = [this](StateId stateId, SymbolId symbolId, std::set<StateId>& arrayStates)
 		{
-			const auto ETransition = transitionFunc.find({ stateId, alphabet.getAlphabet().size() });
-			const auto symbolTransition = transitionFunc.find({ stateId, symbolId });
 			const auto endIt = transitionFunc.end();
 
-			const auto getFromSymbol = [this, &arrayStates](StateId stateId, SymbolId symbolId)
+			if (transitionFunc.find({ stateId, symbolId } ) != endIt)
+			{	
+				for (size_t i : transitionFunc.find({ stateId, symbolId })->second)
 				{
-					for (size_t ind : transitionFunc.find({ stateId, symbolId })->second)
-						arrayStates.emplace(ind);
-				};
+					arrayStates.emplace(i);
 
-			const auto getFromEpsilon = [this, &arrayStates](StateId stateId)
-				{
-					for (size_t ind : transitionFunc.find({ stateId, alphabet.getAlphabet().size() })->second)
+					if (transitionFunc.find({i, alphabet.getAlphabet().size()}) != endIt)
+						for (size_t ind : transitionFunc.find({ i, alphabet.getAlphabet().size() })->second)
 						arrayStates.emplace(ind);
-				};
-
-			if (symbolTransition != endIt)
-			{
-				getFromSymbol(stateId, symbolId);
-				
-				if (ETransition != endIt)
-				{
-					for (size_t ind : symbolTransition->second)
-					{
-						getFromEpsilon(ind);
-					}
 				}
 
 			}
 
-			if (ETransition != endIt)
-				for (size_t indStateEpsilon : ETransition->second)
+			if (transitionFunc.find({ stateId, alphabet.getAlphabet().size() }) != endIt)
+				for (size_t indStateEpsilon : transitionFunc.find({ stateId, alphabet.getAlphabet().size() })->second)
 					if (transitionFunc.find({ indStateEpsilon, symbolId }) != endIt)
 						for (size_t indStateSymbol : transitionFunc.find({ indStateEpsilon, symbolId })->second)
 						{
-							getFromSymbol(indStateSymbol, symbolId);
+							arrayStates.emplace(indStateSymbol);
 
-							if (transitionFunc.find({ indStateSymbol, symbolId }) != endIt)
-								for (size_t indStateNewEpsilon : transitionFunc.find({ indStateSymbol, symbolId })->second)
-									getFromEpsilon(indStateNewEpsilon);
+							if (transitionFunc.find({ indStateSymbol, alphabet.getAlphabet().size()}) != endIt)
+								for (size_t ind : transitionFunc.find({ indStateSymbol , alphabet.getAlphabet().size() })->second)
+									arrayStates.emplace(ind);
 						}
 
 		};
+
+	automatonWoutEpsilon.transitionFunc.clear();
 
 	for (size_t i = 0; i < alphabet.getAlphabet().size(); i++)
 	{
 		for (size_t j = 0; j < states.size(); j++)
 		{
-			std::set<SymbolId> statesAchievableFromThisEClosure;
+			std::set<StateId> statesAchievableFromThisEClosure;
 			for (size_t indState : EClosureStates[j])
 			{
 				getTransitionEClosureBySymbol(indState, i, statesAchievableFromThisEClosure);
 			}
 
+			StateSet newStates;
+
 			for (size_t k = 0; k < EClosureStates.size(); k++)
 			{
-				StateSet states;
-				if (std::any_of(
-					EClosureStates.begin(),
-					EClosureStates.end(),
+				if (std::all_of(
+					EClosureStates[k].begin(),
+					EClosureStates[k].end(),
 					[&statesAchievableFromThisEClosure](size_t element)
 					{
 						return statesAchievableFromThisEClosure.contains(element);
 					}))
 				{
-					states.push_back(k);
+					newStates.push_back(k);
 				}
-				automatonWoutEpsilon.transitionFunc.emplace(std::pair(j, k), states);
+			}
+
+			if (!newStates.empty())
+			{
+				automatonWoutEpsilon.transitionFunc.emplace(
+					TransitionKey{ j, i },
+					std::move(newStates)
+				);
 			}
 		}
 	}
 
 	return automatonWoutEpsilon;
+}
+
+void FiniteAutomaton::printTransitionFunc() const
+{
+	std::cout << "---ФУНКЦИЯ ПЕРЕХОДОВ АВТОМАТА---\n";
+
+	for (size_t i = 0; i < states.size(); i++)
+	{
+		for (size_t j = 0; j < alphabet.getAlphabet().size() + 1; j++)
+		{
+			if (j == alphabet.getAlphabet().size())
+				std::cout << "(q" << i + 1 << ", e) : ";
+			else
+				std::cout << "(q" << i + 1 << ", " << alphabet.getAlphabet()[j] << ") : ";
+
+			TransitionKey key(i, j);
+
+			if (transitionFunc.find(key) != transitionFunc.end())
+			{
+				for (size_t ind : transitionFunc.find(key)->second)
+				{
+					std::cout << ind << ' ';
+				}
+				std::cout << '\n';
+			}
+			else
+			{
+				std::cout << "∅\n";
+			}
+		}
+	}
+}
+
+FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
+{
+	FiniteAutomaton automatonWoutEpsilon(*this);
+
+	automatonWoutEpsilon.states.clear();
+	automatonWoutEpsilon.transitionFunc.clear();
+
+	std::vector<StateSet> statesDeterminateAutomaton;
+	statesDeterminateAutomaton.reserve(states.size());
+
+	automatonWoutEpsilon.states.push_back({ true, false });
+	
+	std::copy_if(
+		states.begin(), states.end(),
+		std::back_inserter(statesDeterminateAutomaton[0]),
+		[](StateInfo state)
+		{
+			return state.isStart;
+		}));
+
+	const auto getTransition = [this](StateId stateId, SymbolId symbolId)
+		{
+			
+		};
+
+	size_t ind = 0;
+
+	while (ind != states.size())
+	{
+
+	}
 }

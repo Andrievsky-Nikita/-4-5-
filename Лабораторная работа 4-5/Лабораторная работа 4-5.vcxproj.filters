@@ -15,11 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Лабораторная работа 4-5.cpp">
-      <Filter>Исходные файлы</Filter>
-    </ClCompile>
     <ClCompile Include="functions.cpp">
       <Filter>Файлы ресурсов</Filter>
+    </ClCompile>
+    <ClCompile Include="Лабораторная работа 4-5.cpp">
+      <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
