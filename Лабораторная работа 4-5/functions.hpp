@@ -21,7 +21,7 @@ struct Alphabet
 {
 private:
 	std::string alphabet;
-	std::string reservedChars = "()+.*e";
+	std::string reservedChars = "()+.*e ";
 public:
 	Alphabet() = default;
 	Alphabet(const std::string& str);
@@ -64,6 +64,7 @@ private:
 	std::vector<StateInfo> states;
 	TransitionTable transitionFunc;
 
+	FiniteAutomaton() = default;
 	FiniteAutomaton(Alphabet&& alphabet,
 		std::vector<StateInfo>&& states,
 		TransitionTable&& function) :
@@ -76,19 +77,37 @@ private:
 	static Alphabet readAlhabet();
 	static std::vector<StateInfo> readStates();
 	static TransitionTable readFunction(const Alphabet& alphabet, const std::vector<StateInfo>& states);
+	void checkChainForAlphabet(const std::string& chain) const
+	{
+		if (std::any_of(
+			chain.begin(),
+			chain.end(),
+			[this](char symbol)
+			{
+				return alphabet.getAlphabet().find(symbol) == std::string::npos;
+			}
+		))
+		{
+			throw std::invalid_argument("цепочка не соответствует алфавиту автомата");
+		}
+	}
 
 public: 
 	static FiniteAutomaton readFiniteAutomaton();
-	void printTransitionFunc() const;
-	bool checkETransition() const {
+	void printTransitionFunc(char statePrefix) const;
+	bool checkETransition() const
+	{
 		return std::any_of(
 			transitionFunc.begin(),
 			transitionFunc.end(),
-			[this](std::pair<TransitionKey, StateSet> elem)
+			[this](const auto& elem)
 			{
 				return elem.first.second == alphabet.getAlphabet().size();
 			});
 	};
+	bool checkDeterminate() const;
+	std::string readChain() const;
+	bool checkChain(const std::string& chain) const;
 	FiniteAutomaton eliminateEpsilonTransitions() const;
 	FiniteAutomaton determinateAutomaton() const;
 };

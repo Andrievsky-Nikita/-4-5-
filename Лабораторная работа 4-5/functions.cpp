@@ -22,7 +22,7 @@ Alphabet FiniteAutomaton::readAlhabet()
 {
 	while (true)
 	{
-		std::cout << "Последовательно введите символы алфавита: ";
+		std::cout << "Последовательно введите символы алфавита без пробелов: ";
 		std::string alph;
 		std::cin >> alph;
 		std::cin.clear();
@@ -45,7 +45,7 @@ FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& inp
 	StateSet numbers;
 	size_t pos = 0;
 
-	const auto sort = [](StateSet& numbers)
+	const auto sortAndUnique = [](StateSet& numbers)
 		{
 			std::sort(numbers.begin(), numbers.end());
 
@@ -64,7 +64,7 @@ FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& inp
 
 		if (pos == input.size())
 		{
-			sort(numbers);
+			sortAndUnique(numbers);
 
 			return numbers;
 		}
@@ -93,15 +93,15 @@ FiniteAutomaton::StateSet FiniteAutomaton::parseInputUint(const std::string& inp
 			throw std::invalid_argument("Ошибка формата");
 		}
 
-		if (value == 0 || value > len)
+		if (value >= len)
 		{
 			throw std::out_of_range("Введеное число не соответствует номеру состояния");
 		}
 
-		numbers.push_back(value - 1);
+		numbers.push_back(value);
 	}
 	
-	sort(numbers);
+	sortAndUnique(numbers);
 
 	return numbers;
 }
@@ -159,8 +159,9 @@ std::vector<FiniteAutomaton::StateInfo> FiniteAutomaton::readStates()
 	std::string input;
 	std::vector<size_t> numbers;
 
-	std::cout << "Введите номера начальных состояний\n"
-		<< "Формат ввода: вводите целые числа разделяемые пробелом\n";
+	std::cout << "Введите индексы начальных состояний\n"
+		<< "Формат ввода: целые индексы от 0 до " << n - 1
+		<< ", разделенные пробелами\n";
 
 	defineStates(input, numbers);
 
@@ -169,8 +170,9 @@ std::vector<FiniteAutomaton::StateInfo> FiniteAutomaton::readStates()
 		states[id].isStart = true;
 	}
 
-	std::cout << "Введите номера финальных состояний\n"
-		<< "Формат ввода: вводите целые числа разделяемые пробелом\n";
+	std::cout << "Введите индексы финальных состояний\n"
+		<< "Формат ввода: целые индексы от 0 до " << n - 1
+		<< ", разделенные пробелами\n";
 
 	defineStates(input, numbers);
 
@@ -198,9 +200,9 @@ FiniteAutomaton::TransitionTable FiniteAutomaton::readFunction(const Alphabet& a
 			while (true)
 			{
 				if (j == alphabet.getAlphabet().size())
-					std::cout << "(q" << i + 1 << ", e) : ";
+					std::cout << "(q" << i << ", e) : ";
 				else 
-					std::cout << "(q" << i + 1 << ", " << alphabet.getAlphabet()[j] << ") : ";
+					std::cout << "(q" << i << ", " << alphabet.getAlphabet()[j] << ") : ";
 
 				std::getline(std::cin, input);
 
@@ -247,6 +249,11 @@ FiniteAutomaton FiniteAutomaton::readFiniteAutomaton()
 
 FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 {
+	if (!checkETransition())
+	{
+		return FiniteAutomaton(*this);
+	}
+
 	FiniteAutomaton automatonWoutEpsilon(*this);
 
 	std::vector<StateSet> EClosureStates;
@@ -365,45 +372,94 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 	return automatonWoutEpsilon;
 }
 
-void FiniteAutomaton::printTransitionFunc() const
+void FiniteAutomaton::printTransitionFunc(char statePrefix) const
 {
 	std::cout << "---ФУНКЦИЯ ПЕРЕХОДОВ АВТОМАТА---\n";
 
+	const size_t epsilonId = alphabet.getAlphabet().size();
+
 	for (size_t i = 0; i < states.size(); i++)
 	{
-		for (size_t j = 0; j < alphabet.getAlphabet().size() + 1; j++)
+		for (size_t j = 0; j < epsilonId + 1; j++)
 		{
-			if (j == alphabet.getAlphabet().size())
-				std::cout << "(q" << i + 1 << ", e) : ";
-			else
-				std::cout << "(q" << i + 1 << ", " << alphabet.getAlphabet()[j] << ") : ";
+			std::cout << "(" << statePrefix << i << ", ";
 
-			TransitionKey key(i, j);
-
-			if (transitionFunc.find(key) != transitionFunc.end())
+			if (j == epsilonId)
 			{
-				for (size_t ind : transitionFunc.find(key)->second)
-				{
-					std::cout << ind + 1 << ' ';
-				}
-				std::cout << '\n';
+				std::cout << "e) : ";
 			}
 			else
+			{
+				std::cout << alphabet.getAlphabet()[j] << ") : ";
+			}
+
+			const auto it = transitionFunc.find({ i, j });
+
+			if (it == transitionFunc.end())
 			{
 				std::cout << "∅\n";
+				continue;
 			}
+
+			std::cout << "{";
+
+			for (size_t k = 0; k < it->second.size(); k++)
+			{
+				if (k != 0)
+				{
+					std::cout << ", ";
+				}
+
+				std::cout << statePrefix << it->second[k];
+			}
+
+			std::cout << "}\n";
 		}
 	}
 }
 
-FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
+bool FiniteAutomaton::checkDeterminate() const
 {
 	if (checkETransition())
 	{
-		throw std::logic_error("Объект не подлежит детерминированию. Содержит е-переходы");
+		return false; 
 	}
 
-	FiniteAutomaton deterministicAutomaton(*this);
+	if (std::any_of(
+		transitionFunc.begin(),
+		transitionFunc.end(),
+		[this](const auto& elem)
+		{
+			return elem.second.size() > 1;
+		}))
+	{
+		return false;
+	}
+
+	if (std::count_if(
+		states.begin(),
+		states.end(),
+		[](const auto& elem)
+		{
+			return elem.isStart;
+		}) != 1)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
+{
+	if (checkDeterminate())
+	{
+		return FiniteAutomaton(*this);
+	}
+
+	FiniteAutomaton deterministicAutomaton = checkETransition()
+		? eliminateEpsilonTransitions()
+		: FiniteAutomaton(*this);
 
 	deterministicAutomaton.states.clear();
 	deterministicAutomaton.transitionFunc.clear();
@@ -415,12 +471,8 @@ FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
 	deterministicAutomaton.states.push_back({ true, false });
 	
 	for (StateId i = 0; i < states.size(); i++)
-	{
 		if (states[i].isStart)
-		{
 			statesDeterminateAutomaton[0].push_back(i);
-		}
-	}
 
 	const auto getTransition = [this](StateId stateId, SymbolId symbolId, std::vector<StateSet>& statesDeterminateAutomaton, FiniteAutomaton& deterministicAutomaton)
 		{
@@ -500,4 +552,87 @@ FiniteAutomaton FiniteAutomaton::determinateAutomaton() const
 	}
 
 	return deterministicAutomaton;
+}
+
+std::string FiniteAutomaton::readChain() const
+{
+	std::string chain;
+
+	while (true)
+	{
+		std::cout << "Введите цепочку: ";
+
+		if (!std::getline(std::cin, chain))
+		{
+			throw std::runtime_error("Ошибка чтения цепочки");
+		}
+
+		try
+		{
+			checkChainForAlphabet(chain);
+			return chain;
+		}
+		catch (const std::invalid_argument& er)
+		{
+			std::cout << "Введенная вами цепочка некорректна\nПодробности ошибки: "
+				<< er.what() << '\n' << "Повторите попытку ввода!\n";
+		}
+	}
+
+}
+
+bool FiniteAutomaton::checkChain(const std::string& chain) const 
+{
+	checkChainForAlphabet(chain);
+
+	if (!checkDeterminate())
+	{
+		FiniteAutomaton deterministicAutomaton =
+			determinateAutomaton();
+
+		return deterministicAutomaton.checkChain(chain);
+	}
+
+	const auto applyChain = [this](const std::string& chain, StateId startId)
+		{
+			std::set<StateId> statesStart{startId};
+			std::set<StateId> statesResult;
+
+			for (SymbolId i = 0; i < chain.size(); i++)
+			{
+				for (StateId indStateStart : statesStart)
+				{
+					const auto iterResult = transitionFunc.find({ indStateStart, alphabet.getAlphabet().find(chain[i]) });
+
+					if (iterResult != transitionFunc.end())
+						for (StateId ind : iterResult->second)
+							statesResult.insert(ind);
+				}
+
+				if (statesResult.size() == 0)
+					return false;
+
+				statesStart = statesResult; 
+				statesResult.clear();
+			}
+
+			return std::any_of(
+				statesStart.begin(),
+				statesStart.end(),
+				[this](StateId ind)
+				{
+					return states[ind].isFinal;
+				}
+			);
+		};
+
+	for (StateId i = 0; i < states.size(); i++)
+	{
+		if (states[i].isStart && applyChain(chain, i))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
