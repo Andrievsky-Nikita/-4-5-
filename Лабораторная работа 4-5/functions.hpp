@@ -94,7 +94,7 @@ private:
 
 public: 
 	static FiniteAutomaton readFiniteAutomaton();
-	void printTransitionFunc(char statePrefix) const;
+	void printTransitionFunc() const;
 	bool checkETransition() const
 	{
 		return std::any_of(

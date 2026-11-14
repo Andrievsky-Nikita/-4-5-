@@ -372,9 +372,25 @@ FiniteAutomaton FiniteAutomaton::eliminateEpsilonTransitions() const
 	return automatonWoutEpsilon;
 }
 
-void FiniteAutomaton::printTransitionFunc(char statePrefix) const
+void FiniteAutomaton::printTransitionFunc() const
 {
 	std::cout << "---ФУНКЦИЯ ПЕРЕХОДОВ АВТОМАТА---\n";
+
+	char statePrefix;
+
+	if (checkDeterminate())
+	{
+		statePrefix = 'P';
+	}
+
+	if (!checkETransition())
+	{
+		statePrefix = 'S';
+	}
+	else
+	{
+		statePrefix = 'q';
+	}
 
 	const size_t epsilonId = alphabet.getAlphabet().size();
 

@@ -14,13 +14,13 @@ int main()
             automaton.eliminateEpsilonTransitions();
 
         std::cout << "\nАвтомат без e-переходов:\n";
-        automatonWoutEpsilon.printTransitionFunc('S');
+        automatonWoutEpsilon.printTransitionFunc();
 
         FiniteAutomaton deterministicAutomaton =
             automatonWoutEpsilon.determinateAutomaton();
 
         std::cout << "\nДетерминированный автомат:\n";
-        deterministicAutomaton.printTransitionFunc('P');
+        deterministicAutomaton.printTransitionFunc();
 
         while (true)
         {
@@ -55,47 +55,47 @@ int main()
 
             switch (choice)
             {
-            case 1:
-            {
-                try
+                case 1:
                 {
-                    std::string chain =
-                        deterministicAutomaton.readChain();
+                    try
+                    {
+                        std::string chain =
+                            deterministicAutomaton.readChain();
 
-                    if (deterministicAutomaton.checkChain(chain))
-                    {
-                        std::cout << "Цепочка допускается автоматом!\n";
+                        if (deterministicAutomaton.checkChain(chain))
+                        {
+                            std::cout << "Цепочка допускается автоматом!\n";
+                        }
+                        else
+                        {
+                            std::cout << "Цепочка не допускается автоматом!\n";
+                        }
                     }
-                    else
+                    catch (const std::runtime_error& er)
                     {
-                        std::cout << "Цепочка не допускается автоматом!\n";
+                        if (std::cin.eof())
+                        {
+                            std::cout << "\nВвод завершён.\n";
+                            return 0;
+                        }
+
+                        throw;
                     }
+
+                    break;
                 }
-                catch (const std::runtime_error& er)
+
+                case 0:
                 {
-                    if (std::cin.eof())
-                    {
-                        std::cout << "\nВвод завершён.\n";
-                        return 0;
-                    }
-
-                    throw;
+                    std::cout << "Завершение программы.\n";
+                    return 0;
                 }
 
-                break;
-            }
-
-            case 0:
-            {
-                std::cout << "Завершение программы.\n";
-                return 0;
-            }
-
-            default:
-            {
-                std::cout << "Такого пункта меню нет. Повторите выбор.\n";
-                break;
-            }
+                default:
+                {
+                    std::cout << "Такого пункта меню нет. Повторите выбор.\n";
+                    break;
+                }
             }
         }
     }
