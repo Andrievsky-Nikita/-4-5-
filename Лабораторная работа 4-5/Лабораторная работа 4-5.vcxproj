@@ -142,6 +142,7 @@
   <ItemGroup>
     <ClCompile Include="functions.cpp" />
     <ClCompile Include="Лабораторная работа 4-5.cpp" />
+    <ClCompile Include="Лабораторная работа 6.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="functions.hpp" />

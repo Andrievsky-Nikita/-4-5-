@@ -643,12 +643,329 @@ bool FiniteAutomaton::checkChain(const std::string& chain) const
 		};
 
 	for (StateId i = 0; i < states.size(); i++)
-	{
 		if (states[i].isStart && applyChain(chain, i))
-		{
 			return true;
+
+	return false;
+}
+
+
+FiniteAutomaton FiniteAutomaton::minimizeAutomaton() const
+{
+	// 1. Устранение ε-переходов и детерминизация автомата.
+
+	FiniteAutomaton minimalAutomaton = checkETransition()
+		? eliminateEpsilonTransitions()
+		: FiniteAutomaton(*this);
+
+	if (!minimalAutomaton.checkDeterminate())
+	{
+		minimalAutomaton = minimalAutomaton.determinateAutomaton();
+	}
+
+	// 2. Поиск достижимых состояний.
+
+	const StateId initialStateCount = minimalAutomaton.states.size();
+
+	std::vector<bool> reachable(initialStateCount, false);
+	std::queue<StateId> queue;
+
+	StateId start = 0;
+
+	for (StateId i = 0; i < initialStateCount; i++)
+	{
+		if (minimalAutomaton.states[i].isStart)
+		{
+			start = i;
+			break;
 		}
 	}
 
-	return false;
+	reachable[start] = true;
+	queue.push(start);
+
+	while (!queue.empty())
+	{
+		StateId current = queue.front();
+		queue.pop();
+
+		for (SymbolId i = 0;
+			i < minimalAutomaton.alphabet.getAlphabet().size();
+			i++)
+		{
+			const auto iter = minimalAutomaton.transitionFunc.find({ current, i });
+
+			if (iter == minimalAutomaton.transitionFunc.end())
+			{
+				continue;
+			}
+
+			StateId next = iter->second.back();
+
+			if (!reachable[next])
+			{
+				reachable[next] = true;
+				queue.push(next);
+			}
+		}
+	}
+
+	// 3. Удаление недостижимых состояний и перенумерация.
+
+	std::vector<StateId> oldToNew(initialStateCount, initialStateCount);
+	std::vector<StateInfo> reachableStates;
+	reachableStates.reserve(initialStateCount);
+
+	for (StateId i = 0; i < initialStateCount; i++)
+	{
+		if (reachable[i])
+		{
+			oldToNew[i] = reachableStates.size();
+			reachableStates.push_back(minimalAutomaton.states[i]);
+		}
+	}
+
+	StateId newStart = oldToNew[start];
+
+	TransitionTable reachableTransitions;
+
+	for (const auto& [key, destinations] : minimalAutomaton.transitionFunc)
+	{
+		StateId oldFrom = key.first;
+
+		if (!reachable[oldFrom])
+		{
+			continue;
+		}
+
+		StateId oldTo = destinations.back();
+
+		reachableTransitions.emplace(
+			TransitionKey{ oldToNew[oldFrom], key.second },
+			StateSet{ oldToNew[oldTo] });
+	}
+
+	minimalAutomaton.states = std::move(reachableStates);
+	minimalAutomaton.transitionFunc = std::move(reachableTransitions);
+
+	// 4. Первоначальное разбиение на финальные и нефинальные состояния.
+
+	const StateId stateCount = minimalAutomaton.states.size();
+
+	// Дополнительное виртуальное состояние.
+	// Оно моделирует отсутствие перехода.
+
+	const StateId sink = stateCount;
+	const StateId totalStateCount = stateCount + 1;
+
+	const SymbolId alphabetSize =
+		minimalAutomaton.alphabet.getAlphabet().size();
+
+	auto getDestination = [&minimalAutomaton, sink](
+		StateId state, SymbolId symbol) -> StateId
+		{
+			if (state == sink)
+			{
+				return sink;
+			}
+
+			const auto iter =
+				minimalAutomaton.transitionFunc.find({ state, symbol });
+
+			if (iter == minimalAutomaton.transitionFunc.end()
+				|| iter->second.empty())
+			{
+				return sink;
+			}
+
+			return iter->second.back();
+		};
+
+	StateSet finalStates;
+	StateSet nonFinalStates;
+
+	for (StateId i = 0; i < stateCount; i++)
+	{
+		if (minimalAutomaton.states[i].isFinal)
+		{
+			finalStates.push_back(i);
+		}
+		else
+		{
+			nonFinalStates.push_back(i);
+		}
+	}
+
+	nonFinalStates.push_back(sink);
+
+	std::vector<StateSet> partitions;
+
+	partitions.push_back(std::move(nonFinalStates));
+
+	if (!finalStates.empty())
+	{
+		partitions.push_back(std::move(finalStates));
+	}
+
+	// 5. Последовательное уточнение разбиения.
+
+	bool changed;
+
+	do
+	{
+		changed = false;
+
+		// Для каждого состояния определяем номер его текущей группы.
+
+		std::vector<StateId> stateToBlock(totalStateCount);
+
+		for (StateId i = 0; i < partitions.size(); i++)
+		{
+			for (StateId state : partitions[i])
+			{
+				stateToBlock[state] = i;
+			}
+		}
+
+		std::vector<StateSet> newPartitions;
+
+		for (const StateSet& block : partitions)
+		{
+			// Группировка состояний по сигнатурам переходов.
+
+			std::map<StateSet, StateSet> groups;
+
+			for (StateId state : block)
+			{
+				StateSet signature;
+				signature.reserve(alphabetSize);
+
+				for (SymbolId symbol = 0; symbol < alphabetSize; symbol++)
+				{
+					StateId destination = getDestination(state, symbol);
+
+					signature.push_back(stateToBlock[destination]);
+				}
+
+				groups[signature].push_back(state);
+			}
+
+			// Если группа разделилась на несколько,
+			// разбиение ещё не завершено.
+
+			if (groups.size() > 1)
+			{
+				changed = true;
+			}
+
+			for (auto& [signature, group] : groups)
+			{
+				newPartitions.push_back(std::move(group));
+			}
+		}
+
+		partitions = std::move(newPartitions);
+
+	} while (changed);
+
+	// 6. Построение минимального автомата.
+
+	// Обновляем соответствие состояний их окончательным группам.
+
+	std::vector<StateId> stateToBlock(totalStateCount);
+
+	for (StateId i = 0; i < partitions.size(); i++)
+	{
+		for (StateId state : partitions[i])
+		{
+			stateToBlock[state] = i;
+		}
+	}
+
+	const StateId sinkBlock = stateToBlock[sink];
+	const StateId startBlock = stateToBlock[newStart];
+
+	std::vector<StateId> blockToNew(partitions.size(), stateCount);
+	std::vector<StateId> representatives(partitions.size(), stateCount);
+
+	std::vector<StateInfo> newStates;
+
+	for (StateId i = 0; i < partitions.size(); i++)
+	{
+		// Если начальное состояние не относится к sinkBlock,
+		// эту группу можно не включать в частичный автомат.
+
+		if (i == sinkBlock && i != startBlock)
+		{
+			continue;
+		}
+
+		StateId representative = stateCount;
+		bool isStart = false;
+
+		for (StateId state : partitions[i])
+		{
+			if (state == sink)
+			{
+				continue;
+			}
+
+			if (representative == stateCount)
+			{
+				representative = state;
+			}
+
+			isStart = isStart || minimalAutomaton.states[state].isStart;
+		}
+
+		if (representative == stateCount)
+		{
+			continue;
+		}
+
+		StateInfo info = minimalAutomaton.states[representative];
+		info.isStart = isStart;
+
+		blockToNew[i] = newStates.size();
+		representatives[i] = representative;
+
+		newStates.push_back(info);
+	}
+
+	// 7. Построение новой функции переходов.
+
+	TransitionTable newTransitionFunc;
+
+	for (StateId i = 0; i < partitions.size(); i++)
+	{
+		if (blockToNew[i] == stateCount)
+		{
+			continue;
+		}
+
+		StateId current = representatives[i];
+
+		for (SymbolId symbol = 0; symbol < alphabetSize; symbol++)
+		{
+			StateId destination = getDestination(current, symbol);
+			StateId destinationBlock = stateToBlock[destination];
+
+			// Переход в sinkBlock не сохраняем:
+			// он эквивалентен отсутствию перехода.
+
+			if (destinationBlock == sinkBlock)
+			{
+				continue;
+			}
+
+			newTransitionFunc.emplace(
+				TransitionKey{ blockToNew[i], symbol },
+				StateSet{ blockToNew[destinationBlock] });
+		}
+	}
+
+	minimalAutomaton.states = std::move(newStates);
+	minimalAutomaton.transitionFunc = std::move(newTransitionFunc);
+
+	return minimalAutomaton;
 }

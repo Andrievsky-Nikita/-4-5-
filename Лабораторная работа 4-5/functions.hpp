@@ -4,8 +4,10 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <queue>
 #include <utility>
 #include <unordered_map>
+#include <map>
 #include <system_error>
 #include <stdexcept>
 #include <charconv>
@@ -110,4 +112,5 @@ public:
 	bool checkChain(const std::string& chain) const;
 	FiniteAutomaton eliminateEpsilonTransitions() const;
 	FiniteAutomaton determinateAutomaton() const;
+	FiniteAutomaton minimizeAutomaton() const;
 };

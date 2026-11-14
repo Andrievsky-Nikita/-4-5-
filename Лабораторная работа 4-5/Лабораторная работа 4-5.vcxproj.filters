@@ -21,6 +21,9 @@
     <ClCompile Include="Лабораторная работа 4-5.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="Лабораторная работа 6.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="functions.hpp">
